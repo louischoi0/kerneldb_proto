@@ -1,4 +1,4 @@
-PAGE_SIZE = 1048 * 8
+PAGE_SIZE = 1024 * 8
 BYTE_ORDER = "little"
 HDR_SIZE = 24
 MAX_PAGE_COUNT = 256
@@ -31,15 +31,20 @@ class blk_driver:
     def write_page(self, page):
         page.update_header_buffer()
 
-        self.f.seek(page.id * PAGE_SIZE + META_SIZE)
+        offset = page.id * PAGE_SIZE + META_SIZE
+        blen = len(page.buffer)
+        self.f.seek(offset)
         self.f.write(page.buffer)
+        print(f"writepage: from={offset}, len={blen}")
     
     def read_page_buffer(self, id):
         self.f.seek(id*PAGE_SIZE + META_SIZE)
+        print(f"read page: from={id*PAGE_SIZE + META_SIZE}, len={PAGE_SIZE}")
         return self.f.read(PAGE_SIZE)
     
     def read_page(self, id):
         buffer = self.read_page_buffer(id)
+        assert len(buffer) == PAGE_SIZE
         return page(*page.parse_header_buffer(buffer))
     
     def init_driver(self):
@@ -48,12 +53,13 @@ class blk_driver:
         self.commit_metablock(metablock(0))
     
     def read_metablock(self):
-        self.f.seek(0)
-        meta = self.f.read(META_SIZE)
-        return metablock(int.from_bytes(meta[:8]))
+        self.f.seek(PAGE_SIZE)
+        meta_buffer = self.f.read(PAGE_SIZE)
+        return metablock(int.from_bytes(meta_buffer[:8], byteorder=BYTE_ORDER, signed=False))
     
     def commit_metablock(self, metablock):
         self.f.seek(0)
+        print("commit: ", metablock.max_page)
         self.f.write(int.to_bytes(metablock.max_page, byteorder=BYTE_ORDER, signed=False))
 
 class page_allocator:
@@ -70,7 +76,7 @@ class page:
         self.id = page_id
         self.min_key = min_key
         self.type = type
-        self.buffer = bytearray(b'\\x00' * PAGE_SIZE)
+        self.buffer = bytearray(b'\\x00' * int((PAGE_SIZE/4)))
     
     def update_header_buffer(self):
         header_buffer = self.ser_header()
@@ -122,15 +128,12 @@ def new_bt_root(key):
 if __name__ == "__main__" :
     blk = blk_driver(0)
     alloc = page_allocator(blk)
-
+    print(alloc.metablock.max_page)
 
     root_page = new_root_page(alloc, 7)
-    #blk.write_page(root_page)
-    header = root_page.ser_header()
-    id, type, min_key = page.parse_header_buffer(header)
-    print(id, type, min_key)
-
+    blk.write_page(root_page)
+    #print(root_page.buffer)
     root_page_read = blk.read_page(0)
-    print(root_page_read.id, root_page_read.type, root_page_read.min_key)
+    print(root_page_read.min_key)
 
     blk.commit_metablock(alloc.metablock)
