@@ -8,6 +8,8 @@ PAGE_TYPE_ROOT = 0
 PAGE_TYPE_INTERNAL = 1
 PAGE_TYPE_DATA = 2
 
+MAX_SLOT_COUNT = 4
+
 class metablock:
     def __init__(self, max_page):
         self.max_page = max_page
@@ -22,7 +24,7 @@ class metablock:
 class blk_driver:
     def __init__(self, dev_id):
         self.id = dev_id
-        self.f = open(f"file__{dev_id}", "+wb")
+        self.f = open(f"file__{dev_id}", "r+b")
     
     def write_page_buffer(self, id, buffer):
         self.f.seek(id * PAGE_SIZE + META_SIZE)
@@ -53,8 +55,9 @@ class blk_driver:
         self.commit_metablock(metablock(0))
     
     def read_metablock(self):
-        self.f.seek(PAGE_SIZE)
-        meta_buffer = self.f.read(PAGE_SIZE)
+        self.f.seek(0)
+        meta_buffer = self.f.read(8)
+        print(meta_buffer)
         return metablock(int.from_bytes(meta_buffer[:8], byteorder=BYTE_ORDER, signed=False))
     
     def commit_metablock(self, metablock):
@@ -110,13 +113,47 @@ def new_root_page(allocator, min_key):
     new_page.update_header_buffer()
     return new_page
 
+def toint64(buf):
+    return int.from_bytes(buf, byteorder=BYTE_ORDER, signed=False)
+
+def tobyteint64(value)
+    return 
+  
+class buffer_cursor:
+    def __init__(self, buffer):
+        self.buffer = buffer
+        self.c = 0
+    
+    def advance(self, len):
+        buf = self.buffer[self.c:self.c+len]
+        self.c += len
+        return buf
+
 class bt_node:
-  def __init__(self, min_key, type):
-      self.min_key = min_key
-      self.type = type
-      self.keys = []
-      self.slots = []
-      self.leaf = False
+    def __init__(self, min_key, type, level):
+        self.min_key = min_key
+        self.type = type
+        self.key_count = 0
+        self.keys = []
+        self.slots = []
+        self.leaf = False
+        self.level = level
+
+    @classmethod 
+    def parse_header_buffer(cls, buffer):
+        cur = buffer_cursor(buffer)
+
+        level_buffer = cur.advance(8)
+        key_count_buffer = cur.advance(8)
+        keys_buffer = cur.advance(8*(MAX_SLOT_COUNT-1))
+        slots_buffer = cur.advance(8*MAX_SLOT_COUNT)
+
+        scur = buffer_cursor(keys_buffer)
+
+        for i in range(MAX_SLOT_COUNT):
+            _buf = scur.advance(8)
+            int.from_bytes(_buf, byteorder=BYTE_ORDER, signed=False)
+
   
   def insert(self):
       pass
@@ -128,7 +165,6 @@ def new_bt_root(key):
 if __name__ == "__main__" :
     blk = blk_driver(0)
     alloc = page_allocator(blk)
-    print(alloc.metablock.max_page)
 
     root_page = new_root_page(alloc, 7)
     blk.write_page(root_page)
